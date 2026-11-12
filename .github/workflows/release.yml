@@ -26,27 +26,50 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/github-script@v7
+        env:
+          BUMP: ${{ github.event.inputs.bump }}
         with:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const sha = context.sha;
-            const checks = await github.paginate(
-              github.rest.checks.listForRef,
-              { owner, repo, ref: sha }
-            );
-            if (checks.length === 0) {
-              core.setFailed(`No CI checks found on ${sha} — did the CI workflow run?`);
-              return;
-            }
-            for (const check of checks) {
-              if (check.name === "Wait for CI") continue; // this gate's own family
-              if (check.status !== "completed") {
-                core.setFailed(`${check.name} is ${check.status}`);
-              } else if (check.conclusion !== "success") {
-                core.setFailed(`${check.name} concluded ${check.conclusion}`);
+            const deadline = Date.now() + 13 * 60 * 1000;
+
+            // Only gate on this repo's own workflows (CI, and Release's own
+            // bump commit produced by a previous run of this workflow).
+            const relevant = new Set(["CI", "Release"]);
+
+            async function scan() {
+              const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRef, {
+                owner, repo, ref: sha, per_page: 100,
+              });
+              const done = [];
+              let pending = false;
+              for (const run of runs) {
+                if (!relevant.has(run.name)) continue;
+                if (run.status !== "completed") { pending = true; continue; }
+                done.push(`${run.name} (${run.display_title}) -> ${run.conclusion}`);
+                if (run.conclusion !== "success") {
+                  core.setFailed(`CI not green on ${sha}: ${run.name} concluded ${run.conclusion}`);
+                  return true;
+                }
               }
+              if (!pending && done.length === 0) {
+                core.setFailed(`No CI workflow runs found on ${sha} — has ci.yml run?`);
+                return true;
+              }
+              if (!pending) {
+                core.info(`All relevant checks green:\n${done.join("\n")}`);
+                return true;
+              }
+              return false;
             }
+
+            while (Date.now() < deadline) {
+              if (await scan()) return;
+              await new Promise((r) => setTimeout(r, 15 * 1000));
+            }
+            core.setFailed(`Timed out waiting for CI to finish on ${sha}`);
 
   release:
     name: Publish to npm
@@ -76,8 +99,10 @@ jobs:
 
       - name: Bump version and tag
         id: version
+        env:
+          BUMP: ${{ github.event.inputs.bump }}
         run: |
-          VERSION=$(npm version "${{ github.event.inputs.bump }}" | sed 's/^v//')
+          VERSION=$(npm version "$BUMP" -m "v%s" | sed 's/^v//')
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
 
@@ -90,10 +115,10 @@ jobs:
       - name: Publish to npm
         run: npm publish
         env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Push commit and tag
-        run: git push origin main --follow-tags
+        run: git push origin HEAD:refs/heads/main --atomic "refs/tags/v${{ steps.version.outputs.version }}"
 
       - name: Create GitHub Release
         run: gh release create "${{ steps.version.outputs.tag }}" --generate-notes
