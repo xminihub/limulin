@@ -27,6 +27,10 @@ bun run src/index.ts --help
 bun run src/index.ts --version
 ```
 
+## Testing note
+
+The component tests need React development-build internals (`act`). `bunfig.toml` preloads `tests/preload.ts` which sets `NODE_ENV=test`, so plain `bun test` works.
+
 ## Development
 
 Run the TUI:

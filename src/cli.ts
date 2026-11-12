@@ -8,27 +8,21 @@ Usage:
   limulin --version    Show the version
 `;
 
-export async function main(
-  argv: string[],
-  env: Record<string, string | undefined>,
-): Promise<number> {
-  const flag = argv[0];
-  if (flag === "--version") {
+export async function main(argv: string[]): Promise<number> {
+  if (argv.length === 0) {
+    await renderApp();
+    return 0;
+  }
+  const option = argv[0];
+  if (option === "--version" && argv.length === 1) {
     const pkg = await import("../package.json");
     console.log(pkg.version);
     return 0;
   }
-  if (flag === "--help") {
+  if (option === "--help" && argv.length === 1) {
     process.stdout.write(USAGE);
     return 0;
   }
-  if (flag !== undefined) {
-    process.stderr.write(`limulin: unknown option ${flag}\n\n${USAGE}`);
-    return 2;
-  }
-  if (env["LIMULIN_TEST_HEADLESS"] === "1") {
-    return 0;
-  }
-  await renderApp();
-  return 0;
+  process.stderr.write(`limulin: unknown option ${option}\n\n${USAGE}`);
+  return 2;
 }
