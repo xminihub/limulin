@@ -1,3 +1,6 @@
+[![CI](https://github.com/xminihub/limulin/actions/workflows/ci.yml/badge.svg)](https://github.com/xminihub/limulin/actions/workflows/ci.yml)
+[![CI](https://github.com/xminihub/limulin/actions/workflows/ci.yml/badge.svg)](https://github.com/xminihub/limulin/actions/workflows/ci.yml)
+
 # limulin
 
 A TUI for [dsh](https://github.com/xminihub) and others, built with [OpenTUI](https://opentui.com).
