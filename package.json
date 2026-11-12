@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "limulin — a tui for dsh and others",
   "scripts": {
+    "dev": "bun src/index.ts",
     "typecheck": "bun check",
     "fmt": "bun fmt",
     "prepublishOnly": "bun check",
