@@ -3,6 +3,22 @@
   "version": "0.1.0",
   "description": "limulin — a tui for dsh and others",
   "type": "module",
+  "license": "MIT",
+  "author": "sheltonsuen",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xminihub/limulin.git"
+  },
+  "bugs": {
+    "url": "https://github.com/xminihub/limulin/issues"
+  },
+  "homepage": "https://github.com/xminihub/limulin#readme",
+  "keywords": [
+    "tui",
+    "terminal",
+    "dsh",
+    "bun"
+  ],
   "main": "index.ts",
   "module": "index.ts",
   "types": "index.ts",
@@ -14,13 +30,17 @@
     "README.md"
   ],
   "scripts": {
-    "typecheck": "bun check"
-  },
-  "license": "MIT",
-  "devDependencies": {
-    "@types/bun": "latest"
+    "typecheck": "bun check",
+    "fmt": "bun fmt",
+    "prepublishOnly": "bun check"
   },
   "peerDependencies": {
     "typescript": "^7"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "engines": {
+    "bun": ">=1.4.4"
   }
 }

@@ -1,23 +1,44 @@
 # limulin
 
-To install dependencies:
+A TUI for [dsh](https://github.com/xminihub) and others.
+
+**Repository:** https://github.com/xminihub/limulin
+**Issues:** https://github.com/xminihub/limulin/issues
+
+## Install
 
 ```bash
+bun add limulin
+```
+
+Or from source:
+
+```bash
+git clone https://github.com/xminihub/limulin.git
+cd limulin
 bun install
 ```
 
-To run:
+## Development
+
+Run the entrypoint:
 
 ```bash
 bun run index.ts
 ```
 
-To type check:
+Type check:
 
 ```bash
 bun check
 ```
 
-Run `bun fmt` to format the code.
+Format:
 
-This project was created using `bun init` in bun v1.4.4. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
+```bash
+bun fmt
+```
+
+## License
+
+MIT
