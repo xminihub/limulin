@@ -1,7 +1,13 @@
 {
   "name": "limulin",
   "version": "0.1.0",
-  "description": "limulin \u2014 a tui for dsh and others",
+  "description": "limulin — a tui for dsh and others",
+  "scripts": {
+    "typecheck": "bun check",
+    "fmt": "bun fmt",
+    "prepublishOnly": "bun check",
+    "test": "bun test"
+  },
   "type": "module",
   "license": "MIT",
   "author": "sheltonsuen",
@@ -29,21 +35,14 @@
     "src",
     "README.md"
   ],
-  "scripts": {
-    "typecheck": "bun check",
-    "fmt": "bun fmt",
-    "prepublishOnly": "bun check",
-    "test": "bun test"
-  },
-  "peerDependencies": {
-    "typescript": "^7"
-  },
-  "devDependencies": {
-    "@types/bun": "latest",
-    "@types/react": "^19.3.0"
+  "bin": {
+    "limulin": "./src/index.ts"
   },
   "engines": {
     "bun": ">=1.4.4"
+  },
+  "peerDependencies": {
+    "typescript": "^7"
   },
   "dependencies": {
     "@opentui/core": "^0.8.4",
@@ -51,7 +50,8 @@
     "@opentui/react": "^0.8.4",
     "react": "19.2.0"
   },
-  "bin": {
-    "limulin": "./src/index.ts"
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/react": "^19.3.0"
   }
 }
