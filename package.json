@@ -1,10 +1,22 @@
 {
   "name": "limulin",
-  "module": "index.ts",
+  "version": "0.1.0",
+  "description": "limulin — a tui for dsh and others",
   "type": "module",
+  "main": "index.ts",
+  "module": "index.ts",
+  "types": "index.ts",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "files": [
+    "index.ts",
+    "README.md"
+  ],
   "scripts": {
     "typecheck": "bun check"
   },
+  "license": "MIT",
   "devDependencies": {
     "@types/bun": "latest"
   },
