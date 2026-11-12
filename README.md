@@ -1,5 +1,5 @@
 [![CI](https://github.com/xminihub/limulin/actions/workflows/ci.yml/badge.svg)](https://github.com/xminihub/limulin/actions/workflows/ci.yml)
-[![CI](https://github.com/xminihub/limulin/actions/workflows/ci.yml/badge.svg)](https://github.com/xminihub/limulin/actions/workflows/ci.yml)
+[![npm version](https://badge.fury.io/js/limulin.svg)](https://badge.fury.io/js/limulin)
 
 # limulin
 
