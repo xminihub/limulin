@@ -19,28 +19,38 @@
     "dsh",
     "bun"
   ],
-  "main": "index.ts",
-  "module": "index.ts",
-  "types": "index.ts",
+  "main": "src/index.ts",
+  "module": "src/index.ts",
+  "types": "src/index.ts",
   "exports": {
-    ".": "./index.ts"
+    ".": "./src/index.ts"
   },
   "files": [
-    "index.ts",
+    "src",
     "README.md"
   ],
   "scripts": {
     "typecheck": "bun check",
     "fmt": "bun fmt",
-    "prepublishOnly": "bun check"
+    "prepublishOnly": "bun check",
+    "test": "NODE_ENV=test bun test"
   },
   "peerDependencies": {
     "typescript": "^7"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@types/react": "^19.3.0"
   },
   "engines": {
     "bun": ">=1.4.4"
+  },
+  "dependencies": {
+    "@opentui/core": "^0.8.4",
+    "@opentui/keymap": "^0.8.4",
+    "@opentui/react": "^0.8.4",
+    "react": "19.2.0",
+    "react-devtools-core": "^8.0.0",
+    "ws": "^8.22.2"
   }
 }
