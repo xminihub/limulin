@@ -1,39 +1,41 @@
 import { describe, expect, test } from "bun:test";
 import { resolve } from "node:path";
+import { repoRoot, runProcess, type RunResult } from "./helpers";
 
-const ROOT = resolve(import.meta.dir, "..");
-const ENTRY = resolve(ROOT, "src/index.ts");
+const ENTRY = resolve(repoRoot, "src/index.ts");
 
-type RunResult = { code: number; out: string; err: string };
-
-async function runCli(args: string[]): Promise<RunResult> {
-  const proc = Bun.spawn(["bun", "run", ENTRY, ...args], {
-    cwd: ROOT,
-    stdin: "pipe",
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const [out, err, code] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-  return { code, out, err };
+async function runCli(
+  args: string[],
+  env?: Record<string, string>,
+): Promise<
+  ReturnType<typeof runProcess> extends never
+    ? never
+    : Awaited<ReturnType<typeof runProcess>>
+> {
+  return runProcess("bun", ["run", ENTRY, ...args], { env });
 }
 
 describe("limulin cli", () => {
   test("--version prints the package version", async () => {
     const { code, out } = await runCli(["--version"]);
     expect(code).toBe(0);
-    const pkg = await import(resolve(ROOT, "package.json"));
+    const pkg = await import(resolve(repoRoot, "package.json"));
     expect(out.trim()).toBe(pkg.version);
+  });
+
+  test("--version prints the injected build-time version when present", async () => {
+    const { code, out } = await runCli(["--version"], {
+      LIMULIN_VERSION: "9.9.9-injected",
+    });
+    expect(code).toBe(0);
+    expect(out.trim()).toBe("9.9.9-injected");
   });
 
   test("--help prints usage and exits 0", async () => {
     const { code, out } = await runCli(["--help"]);
     expect(code).toBe(0);
     expect(out).toContain("Usage:");
-    expect(out).toContain("limulin --help");
+    expect(out).toContain("lim --help");
   });
 
   test("unknown option is a usage error on stderr with non-zero exit", async () => {
@@ -45,6 +47,6 @@ describe("limulin cli", () => {
   test("extra arguments are rejected as a usage error", async () => {
     const { code, err } = await runCli(["--help", "extra"]);
     expect(code).not.toBe(0);
-    expect(err).toContain("limulin:");
+    expect(err).toContain("lim:");
   });
 });

@@ -10,8 +10,8 @@ permissions:
   contents: read
 
 jobs:
-  build:
-    name: Test & Check
+  test:
+    name: Test & Check (source)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,6 +19,29 @@ jobs:
         with:
           bun-version: "1.4.4"
       - run: bun install --frozen-lockfile
-      - run: bun test
       - run: bun check
       - run: bun fmt --check
+      # Source seam only; dist bundle tests live in the artifact job below.
+      - run: bun test tests/cli.test.ts tests/smoke.test.ts tests/frame.test.tsx
+
+  artifact:
+    name: Dist bundle tests (node + bun)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.4"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - run: bun test tests/dist.test.ts
+      # Catch manifest/source leakage into the published tarball.
+      - name: Verify package contents
+        run: |
+          npm pack --silent
+          tar -tzf limulin-*.tgz | sort > /tmp/actual.txt
+          printf '%s\n' package/dist/lim.js package/package.json package/README.md | sort > /tmp/expected.txt
+          diff /tmp/expected.txt /tmp/actual.txt

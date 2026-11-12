@@ -20,11 +20,9 @@ permissions:
   contents: write
 
 jobs:
-  release:
-    name: Publish to npm
+  build:
+    name: Test & build artifacts
     runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -52,7 +50,6 @@ jobs:
         run: |
           VERSION=$(npm version "$BUMP" -m "v%s" | sed 's/^v//')
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -60,13 +57,151 @@ jobs:
       - name: Run tests
         run: bun test
 
-      - name: Publish to npm
-        run: npm publish
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Build dist bundle
+        run: bun run build
+
+      - name: Dist artifact tests (node + bun)
+        run: bun test tests/dist.test.ts
+
+      - name: Build standalone binaries (all targets)
+        run: bash scripts/build-binaries.sh
+
+      - name: Stage artifacts for publish job
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-package
+          path: |
+            package.json
+            bun.lock
+            dist/lim.js
+
+      - name: Stage darwin binaries for signing job
+        uses: actions/upload-artifact@v4
+        with:
+          name: darwin-binaries-unsigned
+          path: |
+            dist/binaries/lim-*-darwin-arm64
+            dist/binaries/lim-*-darwin-x64
+
+      - name: Stage linux/windows binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-windows-binaries
+          path: |
+            dist/binaries/lim-*-linux-x64
+            dist/binaries/lim-*-linux-aarch64
+            dist/binaries/lim-*-windows-x64.exe
 
       - name: Push commit and tag
         run: git push origin HEAD:refs/heads/main --atomic "refs/tags/v${{ steps.version.outputs.version }}"
 
-      - name: Create GitHub Release
-        run: gh release create "${{ steps.version.outputs.tag }}" --generate-notes
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+  sign-macos:
+    name: Sign & notarize macOS binaries
+    needs: build
+    runs-on: macos-latest
+    env:
+      KEYCHAIN: ci.keychain
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: darwin-binaries-unsigned
+
+      - name: Import Developer ID certificate
+        run: |
+          security create-keychain -p ci "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p ci "$KEYCHAIN"
+          echo "${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}" | base64 --decode > cert.p12
+          security import cert.p12 -k "$KEYCHAIN" -P "${{ secrets.APPLE_CERTIFICATE_PASSWORD }}" -T /usr/bin/codesign
+          security default-keychain -s "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
+          rm cert.p12
+
+      - name: Codesign darwin binaries
+        run: |
+          for bin in lim-*-darwin-*; do
+            codesign --force --timestamp --sign "Developer ID Application" \
+              --options runtime "$bin"
+            codesign --verify --verbose=2 "$bin"
+          done
+
+      - name: Notarize and staple
+        env:
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          mkdir -p ~/.private && echo "$APPLE_API_KEY_BASE64" | base64 --decode > ~/.private/AuthKey.p8
+          chmod 600 ~/.private/AuthKey.p8
+          for bin in lim-*-darwin-*; do
+            ditto -c -k --keepParent "$bin" "$bin.zip"
+            xcrun notarytool submit "$bin.zip" \
+              --key ~/.private/AuthKey.p8 \
+              --key-id "$APPLE_API_KEY_ID" \
+              --issuer "$APPLE_API_ISSUER" \
+              --wait
+            xcrun stapler staple "$bin"
+            rm "$bin.zip"
+          done
+
+      - name: Upload signed darwin binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: darwin-binaries-signed
+          path: lim-*-darwin-*
+
+  publish:
+    name: Publish to npm and GitHub Release
+    needs: [build, sign-macos]
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.4"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Download built artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: "{npm-package,darwin-binaries-signed,linux-windows-binaries}"
+          merge-multiple: false
+
+      - name: Assemble tree
+        run: |
+          mkdir -p dist/binaries
+          cp npm-package/package.json npm-package/bun.lock .
+          cp npm-package/dist/lim.js dist/lim.js
+          cp darwin-binaries-signed/lim-*-darwin-* dist/binaries/
+          cp linux-windows-binaries/lim-*-linux-x64 linux-windows-binaries/lim-*-linux-aarch64 linux-windows-binaries/lim-*-windows-x64.exe dist/binaries/
+          rm -rf npm-package darwin-binaries-signed linux-windows-binaries
+
+      - name: Install dependencies (for publish hook checks)
+        run: bun install --frozen-lockfile
+
+      - name: Publish to npm
+        # --ignore-scripts: the tested dist/lim.js is published as-is;
+        # prepublishOnly (check+build) already ran in the build job.
+        run: npm publish --ignore-scripts
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create GitHub Release with all binaries
+        run: |
+          V="${{ needs.build.outputs.version }}"
+          gh release create "v$V" --generate-notes \
+            "dist/binaries/lim-$V-darwin-arm64" \
+            "dist/binaries/lim-$V-darwin-x64" \
+            "dist/binaries/lim-$V-linux-x64" \
+            "dist/binaries/lim-$V-linux-aarch64" \
+            "dist/binaries/lim-$V-windows-x64.exe"
