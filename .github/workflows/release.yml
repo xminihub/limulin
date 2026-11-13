@@ -315,7 +315,7 @@ jobs:
 
   tap:
     name: Bump org Homebrew tap
-    needs: publish
+    needs: [build, publish]
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.TAP_TRIGGER_TOKEN }}
