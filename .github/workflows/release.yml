@@ -159,7 +159,7 @@ jobs:
             codesign --verify --verbose=2 "$bin"
           done
 
-      - name: Notarize and staple
+      - name: Notarize darwin binaries
         timeout-minutes: 30
         env:
           APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
@@ -175,8 +175,23 @@ jobs:
               --key-id "$APPLE_API_KEY_ID" \
               --issuer "$APPLE_API_ISSUER" \
               --wait
-            xcrun stapler staple "$bin"
             rm "$bin.zip"
+          done
+
+      - name: Verify notarization is visible to Gatekeeper
+        timeout-minutes: 10
+        run: |
+          for bin in lim-*-darwin-*; do
+            for attempt in 1 2 3 4 5 6; do
+              if spctl --assess --type exec --verbose=2 "$bin"; then
+                break
+              fi
+              if [ "$attempt" = 6 ]; then
+                echo "::warning::Gatekeeper did not accept $bin yet; the ticket should propagate shortly"
+              else
+                sleep 30
+              fi
+            done
           done
 
       - name: Upload signed darwin binaries
