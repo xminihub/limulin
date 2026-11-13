@@ -43,15 +43,16 @@ version in the asset name, while limulin publishes `lim-<version>-<target>.tar.g
   A bump that fails fails the release, which ADR-0001 already required.
 - Bumping commits straight to the tap's `main`, guarded by fetch-and-rebase
   retry so two tools releasing at once cannot lose each other's commit. The
-  gates run in the same job before the push (`brew style`, `brew fetch`,
-  `brew audit --strict --online`), which is what makes "a green release means an
-  installable formula" true. Reviewing a bump through a pull request instead
-  would put a human between a release and its formula, and the tap would be
-  stale for however long that review takes.
-- Asset naming is the cross-repo contract: `<bin>-<version>-<target>.tar.gz`,
-  derived only inside the tap. `bump.yml` refuses to render when a declared
-  target has no such asset, so a product that renames its artifacts breaks the
-  bump rather than shipping a 404 URL to users.
+  gates run in the same job before the push (`brew style`,
+  `brew fetch --all-platforms`, `brew audit --strict --online`), which is what
+  makes "a green release means an installable formula" true. Reviewing a bump
+  through a pull request instead would put a human between a release and its
+  formula, and the tap would be stale for however long that review takes.
+- Asset naming is the cross-repo contract:
+  `<bin>-<version>-<brew target>.tar.gz`, derived only inside the tap.
+  `bump.yml` refuses to render when a declared target has no such asset, so a
+  product that renames its artifacts breaks the bump rather than shipping a
+  404 URL to users.
 - Credentials are split by direction. The tap commits with its own
   `GITHUB_TOKEN`; no product token ever writes tap contents. A product only
   needs to dispatch and read a run, which it does with a fine-grained
