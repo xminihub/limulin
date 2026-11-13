@@ -6,6 +6,7 @@ import {
   packageTarball,
 } from "../scripts/homebrew";
 import { runProcess } from "./helpers";
+import { statSync } from "node:fs";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -89,10 +90,12 @@ describe("homebrew tarball packaging", () => {
     expect(result.asset).toBe("lim-0.3.2-darwin-arm64.tar.gz");
     expect(tarList(result.path)).toEqual(["lim"]);
 
+    // Owner and timestamp are invisible to an unprivileged extraction, so read
+    // them off tar's listing. Implementations render both differently
+    // (bsdtar "0 0"/"Jan  1  1970", GNU "0/0"/"1970-01-01 00:00").
     const listing = tarListing(result.path);
-    expect(listing).toContain("-rwxr-xr-x");
-    expect(listing).toContain("  0 0 ");
-    expect(listing).toMatch(/Jan( +)1( +)1970/);
+    expect(listing).toMatch(/0\/0|\s0\s+0\s/);
+    expect(listing).toMatch(/1970-01-01 00:00|Jan\s+1\s+1970/);
   });
 
   test("the packaged member is the binary byte-for-byte and stays executable", async () => {
@@ -110,9 +113,7 @@ describe("homebrew tarball packaging", () => {
     const member = join(unpacked, "lim");
     const packed = new Uint8Array(await Bun.file(member).arrayBuffer());
     expect(Array.from(packed)).toEqual(Array.from(payload));
-    expect(
-      Bun.spawnSync(["sh", "-c", `test -x ${JSON.stringify(member)}`]).exitCode,
-    ).toBe(0);
+    expect(statSync(member).mode & 0o777).toBe(0o755);
   });
 });
 
