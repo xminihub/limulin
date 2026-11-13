@@ -4,7 +4,7 @@
  * The release workflow packages each Homebrew target's binary into a
  * deterministic tarball, so the asset names it uploads are the asset names
  * `xminihub/homebrew-tap` generates its URL blocks from. Rendering the formula
- * itself lives in the tap repository (ADR-0003).
+ * itself lives in the tap repository (ADR-0001).
  */
 
 import { join } from "node:path";

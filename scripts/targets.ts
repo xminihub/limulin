@@ -1,6 +1,6 @@
 /**
  * The single target table: every release artifact name, npm platform package
- * name and bun compile target is derived from here (ADR-0004). Vocabulary is
+ * name and bun compile target is derived from here (ADR-0001). Vocabulary is
  * the npm convention (os darwin|linux|win32, cpu arm64|x64) — linux-aarch64
  * and windows-x64 are retired for new releases.
  */

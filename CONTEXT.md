@@ -14,7 +14,7 @@ names code, issues, tests and ADRs must use.
 ## Artifacts
 
 - **target** — one of `darwin-arm64`, `darwin-x64`, `linux-x64`,
-  `linux-arm64`, `win32-x64`. The vocabulary is the npm convention (ADR-0004):
+  `linux-arm64`, `win32-x64`. The vocabulary is the npm convention (ADR-0001):
   os `darwin`/`linux`/`win32`, cpu `arm64`/`x64`. `linux-aarch64` and
   `windows-x64` were retired for new releases; historical release assets keep
   their old names.
@@ -71,4 +71,4 @@ names code, issues, tests and ADRs must use.
 - **notarization ticket** — what `notarytool submit --wait` produces for a
   cdhash. It lives on Apple's servers.
 - **stapling** — attaching that ticket to the artifact itself. Not available for
-  lim: see ADR-0002.
+  lim: see ADR-0001.

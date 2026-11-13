@@ -1,5 +1,5 @@
 /**
- * Publish-time generation of the six npm packages (spec #4, ADR-0004):
+ * Publish-time generation of the six npm packages (spec #4, ADR-0001):
  * the `limulin` launcher plus one `limulin-<target>` platform package
  * per target. Nothing here is committed per-package — the release
  * workflow runs this script against the built binaries, so names and

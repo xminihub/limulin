@@ -8,7 +8,7 @@ import {
   versionFileContent,
 } from "../scripts/targets";
 
-// Locks the npm-convention vocabulary decided in spec #4 / ADR-0004:
+// Locks the npm-convention vocabulary decided in spec #4 / ADR-0001:
 // linux-arm64 (not linux-aarch64), win32-x64 (not windows-x64).
 describe("target table", () => {
   test("the five targets use npm os/cpu names", () => {

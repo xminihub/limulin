@@ -73,7 +73,7 @@ jobs:
       - name: Verify every target binary was produced
         # Guard against a silent compile failure (e.g. a truncated bun
         # runtime download): fail before pushing the tag if any artifact
-        # is missing or empty. Names come from the target table (ADR-0004).
+        # is missing or empty. Names come from the target table (ADR-0001).
         run: |
           V="${{ steps.version.outputs.version }}"
           bun -e '
@@ -257,7 +257,7 @@ jobs:
 
       - name: Package Homebrew tarballs
         # One deterministic tarball asset per Homebrew target: the tap
-        # generates a URL block for exactly these four names (ADR-0003).
+        # generates a URL block for exactly these four names (ADR-0001).
         # The target list derives from the table, never from literals here.
         run: |
           V="${{ needs.build.outputs.version }}"
@@ -324,8 +324,8 @@ jobs:
     steps:
       # The tap owns the formula: this dispatches its bump workflow and waits
       # for the run to land, so a release that failed to bump fails here rather
-      # than leaving a stale Formula/lim.rb behind (ADR-0003). The tap's
-      # tools/lim.json must already carry the linux-arm64 key (ADR-0004
+      # than leaving a stale Formula/lim.rb behind (ADR-0001). The tap's
+      # tools/lim.json must already carry the linux-arm64 key (ADR-0001
       # cutover: tap PR lands before the first renamed release).
       - name: Dispatch the formula bump
         id: dispatch

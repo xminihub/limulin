@@ -3,7 +3,7 @@
 #
 # Produces dist/binaries/<binary asset name> (lim-<version>-<target>, .exe
 # on win32) via `bun build --compile --target=...`. The target table in
-# scripts/targets.ts is the single source of the vocabulary (ADR-0004).
+# scripts/targets.ts is the single source of the vocabulary (ADR-0001).
 # True cross-compilation: run this from any single host (CI uses ubuntu).
 # macOS outputs are unsigned here; signing/notarization happens in the
 # release workflow on macos runners.
