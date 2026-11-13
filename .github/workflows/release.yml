@@ -206,6 +206,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
+    outputs:
+      version: ${{ needs.build.outputs.version }}
+      tapSha256: ${{ steps.tarball.outputs.sha256 }}
     steps:
       - uses: actions/checkout@v4
 
@@ -239,16 +242,82 @@ jobs:
       - name: Publish to npm
         # --ignore-scripts: the tested dist/lim.js is published as-is;
         # prepublishOnly (check+build) already ran in the build job.
-        run: npm publish --ignore-scripts
+        # A rerun of a version already on npm must not force a new version
+        # number; anything else is a real publish failure.
+        run: |
+          V="${{ needs.build.outputs.version }}"
+          if npm publish --ignore-scripts; then
+            exit 0
+          fi
+          if [ "$(npm view "limulin@$V" version 2>/dev/null)" = "$V" ]; then
+            echo "::warning::limulin@$V is already published; skipping npm"
+            exit 0
+          fi
+          exit 1
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Create GitHub Release with all binaries
+      - name: Package darwin-arm64 tarball for Homebrew
+        id: tarball
         run: |
           V="${{ needs.build.outputs.version }}"
-          gh release create "v$V" --generate-notes \
+          # jq ships with the ubuntu runner image.
+          bun run scripts/homebrew.ts package \
+            --binary "dist/binaries/lim-$V-darwin-arm64" \
+            --version "$V" \
+            --dir dist/binaries > tarball.json
+          echo "asset=$(jq -r .asset tarball.json)" >> "$GITHUB_OUTPUT"
+          echo "sha256=$(jq -r .sha256 tarball.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release assets
+        run: |
+          V="${{ needs.build.outputs.version }}"
+          gh release view "v$V" >/dev/null 2>&1 || gh release create "v$V" --generate-notes
+          gh release upload "v$V" --clobber \
             "dist/binaries/lim-$V-darwin-arm64" \
             "dist/binaries/lim-$V-darwin-x64" \
             "dist/binaries/lim-$V-linux-x64" \
             "dist/binaries/lim-$V-linux-aarch64" \
-            "dist/binaries/lim-$V-windows-x64.exe"
+            "dist/binaries/lim-$V-windows-x64.exe" \
+            "dist/binaries/${{ steps.tarball.outputs.asset }}"
+          gh release view "v$V" --json assets --jq '.assets[].name'
+
+  bump-tap:
+    name: Bump Homebrew tap
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.4"
+
+      - name: Check out the tap
+        uses: actions/checkout@v4
+        with:
+          repository: xminihub/homebrew-limulin
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+
+      - name: Render Formula/lim.rb
+        run: |
+          mkdir -p tap/Formula
+          bun run scripts/homebrew.ts render \
+            --version "${{ needs.publish.outputs.version }}" \
+            --sha256 "${{ needs.publish.outputs.tapSha256 }}" \
+            --out tap/Formula/lim.rb
+
+      - name: Push the tap
+        working-directory: tap
+        run: |
+          V="${{ needs.publish.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- "Formula/lim.rb"; then
+            echo "Formula/lim.rb already pins v$V; nothing to push"
+            exit 0
+          fi
+          git add Formula/lim.rb
+          git commit -m "lim $V"
+          git push
