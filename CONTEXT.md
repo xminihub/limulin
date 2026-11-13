@@ -35,12 +35,14 @@ names code, issues, tests and ADRs must use.
   another's naming.
 - **source repository** — `xminihub/limulin` on GitHub: the code, the releases,
   the binaries.
-- **tap** — what Homebrew calls `xminihub/limulin`, i.e. `brew tap
-xminihub/limulin`. Its Git repository is _not_ the source repository: it is
-  `xminihub/homebrew-limulin`. The two share a slug and must not be confused.
+- **tap** — what Homebrew calls `xminihub/tap`, i.e. `brew tap xminihub/tap`.
+  Its Git repository is _not_ the source repository: it is
+  `xminihub/homebrew-tap`, the org-wide tap shared by every xminihub tool. The
+  old per-project tap `xminihub/limulin` is superseded and stays untouched.
 - **formula** — `Formula/lim.rb` in the tap. It is generated, never hand-edited:
-  the source of truth is `packaging/homebrew/lim.rb.tpl` in the source
-  repository.
+  the source of truth is `tools/lim.json` plus `templates/lim.rb.tpl` in the
+  tap, rendered and verified by that repository's `bump.yml`. The source
+  repository only publishes the tarball assets the formula pins.
 
 ## macOS signing
 

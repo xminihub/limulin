@@ -1,4 +1,4 @@
-# 3. One org tap that generates and verifies its own formulae
+# 3. One org-wide tap that generates and verifies its own formulae
 
 Date: 2026-11-13
 
@@ -41,12 +41,13 @@ version in the asset name, while limulin publishes `lim-<version>-<target>.tar.g
   USTAR header pinning from ADR-0001, now with `--target`), then dispatches the
   tap's `bump.yml` with `name`/`version` and polls that run to its conclusion.
   A bump that fails fails the release, which ADR-0001 already required.
-- Bumping opens a pull request instead of pushing to the tap's `main`. The
-  verification gates run before the PR opens (`brew style`, `brew fetch`,
-  `brew audit --strict --online`), and `brew audit --online` is the reason the
-  merge stays manual: it fails a formula whose version is no longer upstream's
-  latest, so auto-merging a bump that lands after a newer release would hand the
-  tap an audit-dirty formula and a red tap.
+- Bumping commits straight to the tap's `main`, guarded by fetch-and-rebase
+  retry so two tools releasing at once cannot lose each other's commit. The
+  gates run in the same job before the push (`brew style`, `brew fetch`,
+  `brew audit --strict --online`), which is what makes "a green release means an
+  installable formula" true. Reviewing a bump through a pull request instead
+  would put a human between a release and its formula, and the tap would be
+  stale for however long that review takes.
 - Asset naming is the cross-repo contract: `<bin>-<version>-<target>.tar.gz`,
   derived only inside the tap. `bump.yml` refuses to render when a declared
   target has no such asset, so a product that renames its artifacts breaks the
@@ -70,9 +71,11 @@ version in the asset name, while limulin publishes `lim-<version>-<target>.tar.g
   commit; the contract between them is an asset name, and it is checked in the
   tap rather than in a unit test in the source repository. `tests/homebrew.test.ts`
   lost its template-versus-asset case for that reason.
-- Installing from the tap requires a merged bump PR, so the tap lags a release
-  by one review. Staleness is now visible (a PR that exists, or a
-  `stale-formula` issue) instead of silent.
+- A formula can be committed while upstream has already moved on, because
+  `brew audit --online` judges staleness against whatever is latest at that
+  moment. `backfill.yml` is what converges that case and files a
+  `stale-formula` issue when it cannot, so staleness is visible instead of
+  silent.
 - The tap's gates need Homebrew, and `brew` is not on the PATH of GitHub's
   ubuntu runners, so `bump.yml` and `audit.yml` run on macOS runners. That also
   means `brew fetch` verifies the darwin arm64 asset on the architecture it can
