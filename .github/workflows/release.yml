@@ -208,7 +208,6 @@ jobs:
       GH_TOKEN: ${{ github.token }}
     outputs:
       version: ${{ needs.build.outputs.version }}
-      tapSha256: ${{ steps.tarball.outputs.sha256 }}
     steps:
       - uses: actions/checkout@v4
 
@@ -257,17 +256,22 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Package darwin-arm64 tarball for Homebrew
-        id: tarball
+      - name: Package Homebrew tarballs
+        # One deterministic tarball asset per Homebrew target: the tap
+        # generates a URL block for exactly these four names (ADR-0003).
         run: |
           V="${{ needs.build.outputs.version }}"
-          # jq ships with the ubuntu runner image.
-          bun run scripts/homebrew.ts package \
-            --binary "dist/binaries/lim-$V-darwin-arm64" \
-            --version "$V" \
-            --dir dist/binaries > tarball.json
-          echo "asset=$(jq -r .asset tarball.json)" >> "$GITHUB_OUTPUT"
-          echo "sha256=$(jq -r .sha256 tarball.json)" >> "$GITHUB_OUTPUT"
+          for target in darwin-arm64 darwin-x64 linux-x64 linux-aarch64; do
+            bun run scripts/homebrew.ts package \
+              --binary "dist/binaries/lim-$V-$target" \
+              --version "$V" \
+              --target "$target" \
+              --dir dist/binaries
+          done
+          for target in darwin-arm64 darwin-x64 linux-x64 linux-aarch64; do
+            tarball="dist/binaries/lim-$V-$target.tar.gz"
+            [ -s "$tarball" ] || { echo "missing or empty: $tarball"; exit 1; }
+          done
 
       - name: Publish GitHub Release assets
         run: |
@@ -279,45 +283,54 @@ jobs:
             "dist/binaries/lim-$V-linux-x64" \
             "dist/binaries/lim-$V-linux-aarch64" \
             "dist/binaries/lim-$V-windows-x64.exe" \
-            "dist/binaries/${{ steps.tarball.outputs.asset }}"
+            "dist/binaries/lim-$V-darwin-arm64.tar.gz" \
+            "dist/binaries/lim-$V-darwin-x64.tar.gz" \
+            "dist/binaries/lim-$V-linux-x64.tar.gz" \
+            "dist/binaries/lim-$V-linux-aarch64.tar.gz"
           gh release view "v$V" --json assets --jq '.assets[].name'
 
-  bump-tap:
-    name: Bump Homebrew tap
+  tap:
+    name: Bump org Homebrew tap
     needs: publish
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.TAP_TRIGGER_TOKEN }}
+      TAP_REPO: xminihub/homebrew-tap
+      VERSION: ${{ needs.publish.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.4.4"
-
-      - name: Check out the tap
-        uses: actions/checkout@v4
-        with:
-          repository: xminihub/homebrew-limulin
-          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
-          path: tap
-
-      - name: Render Formula/lim.rb
+      # The tap owns the formula: this dispatches its bump workflow and waits
+      # for the run to land, so a release that failed to bump fails here rather
+      # than leaving a stale Formula/lim.rb behind (ADR-0003).
+      - name: Dispatch the formula bump
+        id: dispatch
         run: |
-          mkdir -p tap/Formula
-          bun run scripts/homebrew.ts render \
-            --version "${{ needs.publish.outputs.version }}" \
-            --sha256 "${{ needs.publish.outputs.tapSha256 }}" \
-            --out tap/Formula/lim.rb
+          started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          gh workflow run bump.yml --repo "$TAP_REPO" --ref main \
+            -f name=lim -f version="$VERSION"
 
-      - name: Push the tap
-        working-directory: tap
-        run: |
-          V="${{ needs.publish.outputs.version }}"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet -- "Formula/lim.rb"; then
-            echo "Formula/lim.rb already pins v$V; nothing to push"
-            exit 0
+          run_id=""
+          for _ in $(seq 1 60); do
+            run_id="$(gh run list --repo "$TAP_REPO" --workflow bump.yml \
+              --event workflow_dispatch --limit 5 \
+              --json databaseId,createdAt \
+              --jq "[.[] | select(.createdAt >= \"$started_at\")] | .[0].databaseId // empty")"
+            [ -n "$run_id" ] && break
+            sleep 5
+          done
+
+          if [ -z "$run_id" ]; then
+            echo "::error::bump.yml never started for lim $VERSION"
+            exit 1
           fi
-          git add Formula/lim.rb
-          git commit -m "lim $V"
-          git push
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "bump run: https://github.com/$TAP_REPO/actions/runs/$run_id"
+
+      - name: Wait for the bump to land
+        run: |
+          if ! gh run watch "${{ steps.dispatch.outputs.run_id }}" \
+              --repo "$TAP_REPO" --exit-status --interval 20; then
+            echo "::error::Formula/lim.rb was not bumped for $VERSION"
+            exit 1
+          fi
+          gh run view "${{ steps.dispatch.outputs.run_id }}" --repo "$TAP_REPO" \
+            --json conclusion --jq '"tap bump conclusion: " + .'

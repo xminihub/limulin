@@ -17,7 +17,7 @@ v0.1 scaffold: launching the app renders an empty rounded frame. `Ctrl+C` quits.
 ### macOS (Homebrew, recommended)
 
 ```bash
-brew tap xminihub/limulin
+brew tap xminihub/tap
 brew install lim
 ```
 
@@ -27,8 +27,17 @@ Verify:
 lim --version
 ```
 
-The formula installs the Developer ID signed, notarized Apple Silicon binary.
-On an Intel Mac, use npm or Bun below, or the standalone `darwin-x64` binary.
+The formula comes from the org-wide tap (`xminihub/homebrew-tap`), which is where
+every xminihub tool's formula lives now. On an Apple Silicon Mac it installs the
+Developer ID signed, notarized `darwin-arm64` binary; on an Intel Mac it installs
+the signed `darwin-x64` binary. npm/Bun below still work everywhere.
+
+Already tapped the old per-project tap? Move with:
+
+```bash
+brew untap xminihub/limulin
+brew update
+```
 
 ### With a package manager
 
@@ -65,8 +74,9 @@ No runtime required — download the build for your platform from the
 | Linux arm64           | `lim-<version>-linux-aarch64`   |
 | Windows x64           | `lim-<version>-windows-x64.exe` |
 
-The Apple Silicon binary is also published as `lim-<version>-darwin-arm64.tar.gz`,
-the asset the Homebrew formula installs.
+Each Homebrew target is also published as a tarball asset
+(`lim-<version>-darwin-arm64.tar.gz`, `-darwin-x64`, `-linux-x64`,
+`-linux-aarch64`); those are the assets the org tap's formula pins.
 
 macOS binaries are Developer ID signed and notarized. Linux binaries work on
 both glibc and musl systems. **Windows binaries are best-effort**: they are

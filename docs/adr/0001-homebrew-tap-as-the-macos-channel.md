@@ -2,6 +2,11 @@
 
 Date: 2026-11-13
 
+Status: partially superseded by ADR-0003 — the tap identity, the template and
+generator location, the arm64-only platform reach and the `HOMEBREW_TAP_TOKEN`
+credential are replaced. "Generated, never hand-maintained", no bottles and a
+failed bump failing the release still hold.
+
 ## Context
 
 `lim` ships as a bare Mach-O executable. For Gatekeeper to accept a downloaded

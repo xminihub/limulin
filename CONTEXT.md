@@ -19,11 +19,14 @@ names code, issues, tests and ADRs must use.
 - **target** — one of `darwin-arm64`, `darwin-x64`, `linux-x64`,
   `linux-aarch64`, `windows-x64`.
 - **release asset** — a file attached to a GitHub Release. limulin publishes the
-  binaries themselves plus one **tarball asset** for the Homebrew channel.
-- **tarball asset** — `lim-<version>-darwin-arm64.tar.gz`, whose only member is
-  the signed binary renamed to `lim`, mode `0755`, uid/gid 0 and mtime at the
-  epoch. Built by `scripts/homebrew.ts package`, which pins those header fields
-  so the same bytes always hash to the same sha256.
+  binaries themselves plus one **tarball asset** per **brew target**.
+- **tarball asset** — `lim-<version>-<target>.tar.gz`, whose only member is the
+  binary renamed to `lim`, mode `0755`, uid/gid 0 and mtime at the epoch. Built
+  by `scripts/homebrew.ts package --target <target>`, which pins those header
+  fields so the same bytes always hash to the same sha256.
+- **brew target** — the **target** subset the formula covers: `darwin-arm64`,
+  `darwin-x64`, `linux-x64`, `linux-aarch64`. `windows-x64` is never a brew
+  target; Homebrew has no Windows.
 
 ## Channels
 

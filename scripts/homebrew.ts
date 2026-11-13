@@ -1,19 +1,28 @@
 /**
- * Homebrew tap packaging for the `lim` command.
+ * Homebrew packaging for the `lim` command.
  *
- * The release workflow packages the signed darwin-arm64 binary into a tarball
- * and renders the tap formula from these helpers, so the asset the release
- * uploads and the URL the formula downloads are derived from one place.
+ * The release workflow packages each Homebrew target's binary into a
+ * deterministic tarball, so the asset names it uploads are the asset names
+ * `xminihub/homebrew-tap` generates its URL blocks from. Rendering the formula
+ * itself lives in the tap repository (ADR-0003).
  */
 
 import { join } from "node:path";
 
 export const BINARY_NAME = "lim";
-export const TAP_TARGET = "darwin-arm64";
-export const RELEASE_REPO = "xminihub/limulin";
+export const DEFAULT_TARGET = "darwin-arm64";
+
+/** Targets `Formula/lim.rb` has a platform block for. */
+export const BREW_TARGETS = [
+  "darwin-arm64",
+  "darwin-x64",
+  "linux-x64",
+  "linux-aarch64",
+] as const;
+
+export type BrewTarget = (typeof BREW_TARGETS)[number];
 
 const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
-const SHA256 = /^[0-9a-f]{64}$/;
 
 function requireVersion(version: string): string {
   if (!SEMVER.test(version)) {
@@ -22,14 +31,17 @@ function requireVersion(version: string): string {
   return version;
 }
 
-export function assetName(version: string): string {
-  return `${BINARY_NAME}-${requireVersion(version)}-${TAP_TARGET}.tar.gz`;
+export function parseTarget(target: string): BrewTarget {
+  if (!(BREW_TARGETS as readonly string[]).includes(target)) {
+    throw new Error(
+      `not a homebrew target: ${target} (expected ${BREW_TARGETS.join(", ")})`,
+    );
+  }
+  return target as BrewTarget;
 }
 
-export function downloadUrl(version: string): string {
-  return `https://github.com/${RELEASE_REPO}/releases/download/v${requireVersion(
-    version,
-  )}/${assetName(version)}`;
+export function assetName(version: string, target: string = DEFAULT_TARGET) {
+  return `${BINARY_NAME}-${requireVersion(version)}-${parseTarget(target)}.tar.gz`;
 }
 
 const BLOCK = 512;
@@ -66,6 +78,7 @@ function ustarHeader(name: string, size: number): Uint8Array {
 export type PackageOptions = {
   binary: string;
   version: string;
+  target?: string;
   outDir: string;
 };
 
@@ -78,6 +91,7 @@ export type PackageResult = {
 export async function packageTarball({
   binary,
   version,
+  target = DEFAULT_TARGET,
   outDir,
 }: PackageOptions): Promise<PackageResult> {
   const payload = await Bun.file(binary).arrayBuffer();
@@ -94,7 +108,7 @@ export async function packageTarball({
     level: 9,
   });
 
-  const asset = assetName(requireVersion(version));
+  const asset = assetName(version, target);
   const path = join(outDir, asset);
   await Bun.write(path, zipped, { createPath: false });
   return {
@@ -102,35 +116,6 @@ export async function packageTarball({
     asset,
     sha256: new Bun.CryptoHasher("sha256").update(zipped).digest("hex"),
   };
-}
-
-export const TEMPLATE_PATH = join(
-  import.meta.dir,
-  "..",
-  "packaging",
-  "homebrew",
-  "lim.rb.tpl",
-);
-
-export type RenderOptions = {
-  version: string;
-  sha256: string;
-  template?: string;
-};
-
-export async function renderFormula({
-  version,
-  sha256,
-  template = TEMPLATE_PATH,
-}: RenderOptions): Promise<string> {
-  if (!SHA256.test(sha256)) {
-    throw new Error(`not a sha256: ${sha256}`);
-  }
-  requireVersion(version);
-  const source = await Bun.file(template).text();
-  return source
-    .replaceAll("{{VERSION}}", version)
-    .replaceAll("{{SHA256}}", sha256);
 }
 
 function parseFlags(argv: string[]): Record<string, string> {
@@ -160,24 +145,10 @@ export async function main(argv: string[]): Promise<void> {
     const { asset, path, sha256 } = await packageTarball({
       binary: required(flags, "binary"),
       version: required(flags, "version"),
+      target: flags["target"] ?? DEFAULT_TARGET,
       outDir: required(flags, "dir"),
     });
     console.log(JSON.stringify({ asset, path, sha256 }));
-    return;
-  }
-
-  if (command === "render") {
-    const formula = await renderFormula({
-      version: required(flags, "version"),
-      sha256: required(flags, "sha256"),
-    });
-    const out = flags["out"];
-    if (out) {
-      await Bun.write(out, formula);
-      console.log(out);
-    } else {
-      process.stdout.write(formula);
-    }
     return;
   }
 
