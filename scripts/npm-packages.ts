@@ -44,7 +44,7 @@ export function mainManifest(opts: ManifestOptions): Record<string, unknown> {
     license: identity.license,
     homepage: identity.homepage,
     repository: { type: "git", url: identity.repository },
-    bin: { lim: "./bin/lim.cjs" },
+    bin: { lim: "bin/lim.cjs" },
     files: ["bin/lim.cjs", "README.md"],
     optionalDependencies,
   };

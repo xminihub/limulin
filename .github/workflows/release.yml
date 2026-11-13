@@ -220,17 +220,21 @@ jobs:
           # carry just their binary plus the manifest.
           cp README.md dist/npm/limulin/README.md
 
-      - name: Publish npm packages with provenance
-        # A rerun of a version already on npm must not force a new version
-        # number; anything else is a real publish failure. Trusted
-        # publishing replaces NPM_TOKEN: the first run needs the npm-side
-        # trusted-publisher config for all six names.
+      - name: Publish npm packages with provenance when configured
+        # Token auth via NPM_TOKEN, as in the pre-#4 flow. --provenance is
+        # deferred: it requires the one-time npm-side trusted-publisher
+        # config for all six names (spec #4 Further Notes). Once configured
+        # at npmjs.com, add --provenance here and id-token: write is
+        # already in place. A rerun of a version already on npm must not
+        # force a new version number; anything else is a real failure.
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           V="${{ needs.build.outputs.version }}"
           failed=0
           for dir in dist/npm/*; do
             name="$(bun -p "await Bun.file('$dir/package.json').json().then(p=>p.name)")"
-            if npm publish "$dir" --provenance --access public --ignore-scripts; then
+            if npm publish "$dir" --access public --ignore-scripts; then
               echo "published $name@$V"
             elif [ "$(npm view "$name@$V" version 2>/dev/null)" = "$V" ]; then
               echo "::warning::$name@$V is already published; skipping"

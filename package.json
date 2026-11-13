@@ -19,7 +19,7 @@
     "url": "https://github.com/xminihub/limulin/issues"
   },
   "bin": {
-    "lim": "./bin/lim.cjs"
+    "lim": "bin/lim.cjs"
   },
   "files": [
     "bin/lim.cjs",

@@ -21,7 +21,7 @@ describe("npm package manifests (generated at publish time)", () => {
     expect(m).toMatchObject({
       name: "limulin",
       version: "0.4.0",
-      bin: { lim: "./bin/lim.cjs" },
+      bin: { lim: "bin/lim.cjs" },
       files: ["bin/lim.cjs", "README.md"],
       license: "MIT",
     });
