@@ -135,25 +135,32 @@ jobs:
           name: darwin-binaries-unsigned
 
       - name: Import Developer ID certificate
+        timeout-minutes: 5
         run: |
           security create-keychain -p ci "$KEYCHAIN"
           security set-keychain-settings -lut 21600 "$KEYCHAIN"
           security unlock-keychain -p ci "$KEYCHAIN"
           echo "${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}" | base64 --decode > cert.p12
-          security import cert.p12 -k "$KEYCHAIN" -P "${{ secrets.APPLE_CERTIFICATE_PASSWORD }}" -T /usr/bin/codesign
+          security import cert.p12 -k "$KEYCHAIN" -P "${{ secrets.APPLE_CERTIFICATE_PASSWORD }}" \
+            -T /usr/bin/codesign -A
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k ci "$KEYCHAIN"
           security default-keychain -s "$KEYCHAIN"
           security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
           rm cert.p12
+          security find-identity -v -p codesigning "$KEYCHAIN"
 
       - name: Codesign darwin binaries
+        timeout-minutes: 10
         run: |
+          security unlock-keychain -p ci "$KEYCHAIN"
           for bin in lim-*-darwin-*; do
-            codesign --force --timestamp --sign "Developer ID Application" \
-              --options runtime "$bin"
+            codesign --force --timestamp --keychain "$KEYCHAIN" \
+              --sign "Developer ID Application" --options runtime "$bin"
             codesign --verify --verbose=2 "$bin"
           done
 
       - name: Notarize and staple
+        timeout-minutes: 30
         env:
           APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
