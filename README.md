@@ -14,7 +14,23 @@ v0.1 scaffold: launching the app renders an empty rounded frame. `Ctrl+C` quits.
 
 ## Install
 
-### With a package manager (recommended)
+### macOS (Homebrew, recommended)
+
+```bash
+brew tap xminihub/limulin
+brew install lim
+```
+
+Verify:
+
+```bash
+lim --version
+```
+
+The formula installs the Developer ID signed, notarized Apple Silicon binary.
+On an Intel Mac, use npm or Bun below, or the standalone `darwin-x64` binary.
+
+### With a package manager
 
 The `limulin` package ships a portable JavaScript build; the command it installs is `lim`.
 
@@ -48,6 +64,9 @@ No runtime required — download the build for your platform from the
 | Linux x86_64          | `lim-<version>-linux-x64`       |
 | Linux arm64           | `lim-<version>-linux-aarch64`   |
 | Windows x64           | `lim-<version>-windows-x64.exe` |
+
+The Apple Silicon binary is also published as `lim-<version>-darwin-arm64.tar.gz`,
+the asset the Homebrew formula installs.
 
 macOS binaries are Developer ID signed and notarized. Linux binaries work on
 both glibc and musl systems. **Windows binaries are best-effort**: they are
