@@ -30,7 +30,10 @@ jobs:
       - name: Verify npm package generation end to end
         # Runs the publish-time generator in CLI mode against stub binaries,
         # then checks each package tarball holds exactly its manifest plus
-        # the binary (and the launcher plus README for limulin).
+        # the binary (and the launcher plus README for limulin). LC_ALL=C
+        # pins the byte-wise sort both sides of every diff share.
+        env:
+          LC_ALL: C
         run: |
           V="$(bun -p "await Bun.file('package.json').json().then(p=>p.version)")"
           bun -e '
@@ -50,6 +53,6 @@ jobs:
           done
           test -f limulin/limulin-$V.tgz
           tar -tzf limulin-win32-x64/limulin-win32-x64-$V.tgz | sort > /tmp/win.txt
-          diff <(printf '%s\n' package/lim.exe package/package.json) /tmp/win.txt
+          diff <(printf '%s\n' package/lim.exe package/package.json | sort) /tmp/win.txt
           tar -tzf limulin/limulin-$V.tgz | sort > /tmp/main.txt
-          diff <(printf '%s\n' package/bin/lim.cjs package/package.json package/README.md) /tmp/main.txt
+          diff <(printf '%s\n' package/bin/lim.cjs package/package.json package/README.md | sort) /tmp/main.txt
