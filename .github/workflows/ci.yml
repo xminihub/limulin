@@ -11,21 +11,7 @@ permissions:
 
 jobs:
   test:
-    name: Test & Check (source)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.4.4"
-      - run: bun install --frozen-lockfile
-      - run: bun check
-      - run: bun fmt --check
-      # Source seam only; dist bundle tests live in the artifact job below.
-      - run: bun test tests/cli.test.ts tests/smoke.test.ts tests/frame.test.tsx
-
-  artifact:
-    name: Dist bundle tests (node + bun)
+    name: Test & Check (source + artifact seams)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,12 +22,34 @@ jobs:
         with:
           node-version: "22"
       - run: bun install --frozen-lockfile
-      - run: bun run build
-      - run: bun test tests/dist.test.ts
-      # Catch manifest/source leakage into the published tarball.
-      - name: Verify package contents
+      - run: bun check
+      - run: bun fmt --check
+      # Source, launcher (node black box), installer (bash against a local
+      # release fixture), target table and npm package generation.
+      - run: bun test
+      - name: Verify npm package generation end to end
+        # Runs the publish-time generator in CLI mode against stub binaries,
+        # then checks each package tarball holds exactly its manifest plus
+        # the binary (and the launcher plus README for limulin).
         run: |
-          npm pack --silent
-          tar -tzf limulin-*.tgz | sort > /tmp/actual.txt
-          printf '%s\n' package/dist/lim.js package/package.json package/README.md | sort > /tmp/expected.txt
-          diff /tmp/expected.txt /tmp/actual.txt
+          V="$(bun -p "await Bun.file('package.json').json().then(p=>p.version)")"
+          bun -e '
+            const { TARGETS, binaryAssetName } = await import("./scripts/targets.ts");
+            const version = await Bun.file("package.json").json().then((p) => p.version);
+            for (const t of TARGETS) {
+              const f = `dist/binaries/${binaryAssetName(version, t.name)}`;
+              await Bun.write(f, `stub ${t.name}`);
+              await Bun.spawn(["chmod", "+x", f]);
+            }
+          '
+          bun run scripts/npm-packages.ts
+          cp README.md dist/npm/limulin/README.md
+          cd dist/npm
+          for p in */; do
+            (cd "$p" && npm pack --silent > /dev/null)
+          done
+          test -f limulin/limulin-$V.tgz
+          tar -tzf limulin-win32-x64/limulin-win32-x64-$V.tgz | sort > /tmp/win.txt
+          diff <(printf '%s\n' package/lim.exe package/package.json) /tmp/win.txt
+          tar -tzf limulin/limulin-$V.tgz | sort > /tmp/main.txt
+          diff <(printf '%s\n' package/bin/lim.cjs package/package.json package/README.md) /tmp/main.txt

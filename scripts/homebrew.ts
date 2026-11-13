@@ -8,19 +8,17 @@
  */
 
 import { join } from "node:path";
+import { TARGETS, type TargetName } from "./targets";
 
 export const BINARY_NAME = "lim";
-export const DEFAULT_TARGET = "darwin-arm64";
+export const DEFAULT_TARGET: TargetName = "darwin-arm64";
 
-/** Targets `Formula/lim.rb` has a platform block for. */
-export const BREW_TARGETS = [
-  "darwin-arm64",
-  "darwin-x64",
-  "linux-x64",
-  "linux-aarch64",
-] as const;
+/** Targets `Formula/lim.rb` has a platform block for: everything but win32. */
+export const BREW_TARGETS = TARGETS.filter((t) => t.os !== "win32").map(
+  (t) => t.name,
+) as readonly TargetName[];
 
-export type BrewTarget = (typeof BREW_TARGETS)[number];
+export type BrewTarget = TargetName;
 
 const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
@@ -32,12 +30,13 @@ function requireVersion(version: string): string {
 }
 
 export function parseTarget(target: string): BrewTarget {
-  if (!(BREW_TARGETS as readonly string[]).includes(target)) {
+  const found = BREW_TARGETS.find((t) => t === target);
+  if (!found) {
     throw new Error(
       `not a homebrew target: ${target} (expected ${BREW_TARGETS.join(", ")})`,
     );
   }
-  return target as BrewTarget;
+  return found;
 }
 
 export function assetName(version: string, target: string = DEFAULT_TARGET) {

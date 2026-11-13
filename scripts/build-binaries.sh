@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # Build standalone compiled binaries for all release targets.
 #
-# Produces dist/binaries/lim-<version>-<os>-<arch>[.exe] via
-# `bun build --compile --target=...`. True cross-compilation: run this
-# from any single host (CI uses ubuntu). macOS outputs are unsigned here;
-# signing/notarization happens in the release workflow on macos runners.
+# Produces dist/binaries/<binary asset name> (lim-<version>-<target>, .exe
+# on win32) via `bun build --compile --target=...`. The target table in
+# scripts/targets.ts is the single source of the vocabulary (ADR-0004).
+# True cross-compilation: run this from any single host (CI uses ubuntu).
+# macOS outputs are unsigned here; signing/notarization happens in the
+# release workflow on macos runners.
 #
 # Constraints (OpenTUI 0.8.x): every target's native @opentui/core-*
 # platform package must be resolvable at build time, so we install them
@@ -23,25 +25,22 @@ echo "==> installing all @opentui/core platform packages (wildcard os/cpu)"
 # Lockfile-invisible: pulls every optional platform package onto this host.
 bun install --os="*" --cpu="*" "@opentui/core@$CORE_RANGE" >/dev/null
 
-TARGETS=(
-  "bun-darwin-arm64"
-  "bun-darwin-x64"
-  "bun-linux-x64"
-  "bun-linux-aarch64"
-  "bun-windows-x64"
-)
+# One "<bunTarget> <assetName>" line per target, straight from the table.
+ROWS="$(bun -e '
+  const { TARGETS, binaryAssetName } = await import("./scripts/targets.ts");
+  const version = await Bun.file("package.json").json().then((p) => p.version);
+  for (const t of TARGETS) console.log(t.bunTarget, binaryAssetName(version, t.name));
+')"
 
-for target in "${TARGETS[@]}"; do
-  name="${target#bun-}" # darwin-arm64 etc.; bun emits .exe for windows
-  out="$OUT/lim-$VERSION-$name"
-  [ "$name" = "windows-x64" ] && out="$out.exe"
-  echo "==> compiling $out"
+while read -r bun_target asset; do
+  [ -n "$bun_target" ] || continue
+  echo "==> compiling $OUT/$asset"
   bun build src/index.ts \
     --compile \
-    --target="$target" \
+    --target="$bun_target" \
     --define "process.env.LIMULIN_VERSION=\"$VERSION\"" \
-    --outfile "$out"
-done
+    --outfile "$OUT/$asset"
+done <<< "$ROWS"
 
 ls -la "$OUT"
 echo "done."

@@ -13,26 +13,45 @@ names code, issues, tests and ADRs must use.
 
 ## Artifacts
 
-- **binary** — a compiled single-file `bun build --compile` output for one
-  target, named `lim-<version>-<os>-<arch>` (`.exe` on Windows). `<version>` is
-  bare semver; the release _tag_ is `v<version>`.
 - **target** — one of `darwin-arm64`, `darwin-x64`, `linux-x64`,
-  `linux-aarch64`, `windows-x64`.
-- **release asset** — a file attached to a GitHub Release. limulin publishes the
-  binaries themselves plus one **tarball asset** per **brew target**.
+  `linux-arm64`, `win32-x64`. The vocabulary is the npm convention (ADR-0004):
+  os `darwin`/`linux`/`win32`, cpu `arm64`/`x64`. `linux-aarch64` and
+  `windows-x64` were retired for new releases; historical release assets keep
+  their old names.
+- **target table** — `scripts/targets.ts`: the single source of the target
+  list, each target's bun compile target, npm platform package name and
+  artifact names. Everything generated derives from it.
+- **binary** — a compiled single-file `bun build --compile` output for one
+  target, named `lim-<version>-<target>` (`.exe` on `win32-x64`). `<version>`
+  is bare semver; the release _tag_ is `v<version>`.
+- **release asset** — a file attached to a GitHub Release. limulin publishes
+  the binaries themselves, one **tarball asset** per **brew target**, plus
+  `install.sh`, `SHA256SUMS` and `lim-latest.txt`.
 - **tarball asset** — `lim-<version>-<target>.tar.gz`, whose only member is the
   binary renamed to `lim`, mode `0755`, uid/gid 0 and mtime at the epoch. Built
   by `scripts/homebrew.ts package --target <target>`, which pins those header
   fields so the same bytes always hash to the same sha256.
 - **brew target** — the **target** subset the formula covers: `darwin-arm64`,
-  `darwin-x64`, `linux-x64`, `linux-aarch64`. `windows-x64` is never a brew
+  `darwin-x64`, `linux-x64`, `linux-arm64`. `win32-x64` is never a brew
   target; Homebrew has no Windows.
+- **checksum manifest** — `SHA256SUMS`, a release asset listing the sha256 of
+  every binary and tarball asset. The installer verifies against it.
+- **latest version file** — `lim-latest.txt`, a release asset holding the bare
+  version of the newest release. The installer resolves the current version
+  through it instead of the rate-limited GitHub API.
+- **launcher** — the CJS bin shipped by the `limulin` npm package: resolves
+  the host's **platform package** (or `LIM_BIN_PATH`) and spawns its binary.
+  No JS fallback: no match is a hard error pointing at the raw binaries.
+- **platform package** — `limulin-<target>`, one per target, holding just the
+  binary named `lim` (`.exe` on win32) and the `os`/`cpu` fields npm prunes
+  on. Generated at publish time from the **target table**; never committed.
 
 ## Channels
 
-- **channel** — a way to install lim: Homebrew, npm/Bun, or a standalone binary.
-  Each channel owns its own users; a change to one must not silently break
-  another's naming.
+- **channel** — a way to install lim, in priority order: **installer**
+  (`install.sh`, macOS and Linux), **Homebrew** (macOS first), **npm**, or a
+  raw **binary**. Each channel owns its own users; a change to one must not
+  silently break another's naming.
 - **source repository** — `xminihub/limulin` on GitHub: the code, the releases,
   the binaries.
 - **tap** — what Homebrew calls `xminihub/tap`, i.e. `brew tap xminihub/tap`.

@@ -67,55 +67,40 @@ jobs:
       - name: Run tests
         run: bun test
 
-      - name: Build dist bundle
-        run: bun run build
-
-      - name: Dist artifact tests (node + bun)
-        run: bun test tests/dist.test.ts
-
       - name: Build standalone binaries (all targets)
         run: bash scripts/build-binaries.sh
 
       - name: Verify every target binary was produced
         # Guard against a silent compile failure (e.g. a truncated bun
         # runtime download): fail before pushing the tag if any artifact
-        # is missing or empty.
+        # is missing or empty. Names come from the target table (ADR-0004).
         run: |
           V="${{ steps.version.outputs.version }}"
-          for f in \
-            "dist/binaries/lim-$V-darwin-arm64" \
-            "dist/binaries/lim-$V-darwin-x64" \
-            "dist/binaries/lim-$V-linux-x64" \
-            "dist/binaries/lim-$V-linux-aarch64" \
-            "dist/binaries/lim-$V-windows-x64.exe"; do
-            [ -s "$f" ] || { echo "missing or empty: $f"; exit 1; }
-          done
-
-      - name: Stage artifacts for publish job
-        uses: actions/upload-artifact@v4
-        with:
-          name: npm-package
-          path: |
-            package.json
-            bun.lock
-            dist/lim.js
+          bun -e '
+            const { TARGETS, binaryAssetName } = await import("./scripts/targets.ts");
+            for (const t of TARGETS) {
+              const f = `dist/binaries/${binaryAssetName(process.env.V, t.name)}`;
+              const size = await Bun.file(f).size;
+              if (!size) { console.error(`missing or empty: ${f}`); process.exit(1); }
+            }
+          '
+        env:
+          V: ${{ steps.version.outputs.version }}
 
       - name: Stage darwin binaries for signing job
         uses: actions/upload-artifact@v4
         with:
           name: darwin-binaries-unsigned
-          path: |
-            dist/binaries/lim-*-darwin-arm64
-            dist/binaries/lim-*-darwin-x64
+          path: dist/binaries/lim-*-darwin-*
 
-      - name: Stage linux/windows binaries
+      - name: Stage linux/win32 binaries
         uses: actions/upload-artifact@v4
         with:
-          name: linux-windows-binaries
+          name: linux-win32-binaries
           path: |
             dist/binaries/lim-*-linux-x64
-            dist/binaries/lim-*-linux-aarch64
-            dist/binaries/lim-*-windows-x64.exe
+            dist/binaries/lim-*-linux-arm64
+            dist/binaries/lim-*-win32-x64.exe
 
       - name: Push commit and tag
         run: git push origin HEAD:refs/heads/main --atomic "refs/tags/v${{ steps.version.outputs.version }}"
@@ -188,12 +173,18 @@ jobs:
     name: Publish to npm and GitHub Release
     needs: [build, sign-macos]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write # npm provenance via GitHub OIDC (spec #4)
     env:
       GH_TOKEN: ${{ github.token }}
-    outputs:
-      version: ${{ needs.build.outputs.version }}
     steps:
+      # The bump commit and tag were pushed by the build job mid-run;
+      # check out the tag so generated manifests carry the released
+      # version, not the pre-bump one.
       - uses: actions/checkout@v4
+        with:
+          ref: v${{ needs.build.outputs.version }}
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -207,70 +198,105 @@ jobs:
       - name: Download built artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: "{npm-package,darwin-binaries-signed,linux-windows-binaries}"
+          pattern: "{darwin-binaries-signed,linux-win32-binaries}"
           merge-multiple: false
 
       - name: Assemble tree
         run: |
           mkdir -p dist/binaries
-          cp npm-package/package.json npm-package/bun.lock .
-          cp npm-package/dist/lim.js dist/lim.js
           cp darwin-binaries-signed/lim-*-darwin-* dist/binaries/
-          cp linux-windows-binaries/lim-*-linux-x64 linux-windows-binaries/lim-*-linux-aarch64 linux-windows-binaries/lim-*-windows-x64.exe dist/binaries/
-          rm -rf npm-package darwin-binaries-signed linux-windows-binaries
+          cp linux-win32-binaries/lim-*-linux-x64 linux-win32-binaries/lim-*-linux-arm64 linux-win32-binaries/lim-*-win32-x64.exe dist/binaries/
+          rm -rf darwin-binaries-signed linux-win32-binaries
 
-      - name: Install dependencies (for publish hook checks)
+      - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Publish to npm
-        # --ignore-scripts: the tested dist/lim.js is published as-is;
-        # prepublishOnly (check+build) already ran in the build job.
+      - name: Generate npm packages (launcher + 5 platform)
+        # Everything publishable to npm is generated here from the single
+        # target table; nothing is published from committed manifests.
+        run: |
+          bun run scripts/npm-packages.ts
+          # Only the launcher package ships the README; platform packages
+          # carry just their binary plus the manifest.
+          cp README.md dist/npm/limulin/README.md
+
+      - name: Publish npm packages with provenance
         # A rerun of a version already on npm must not force a new version
-        # number; anything else is a real publish failure.
+        # number; anything else is a real publish failure. Trusted
+        # publishing replaces NPM_TOKEN: the first run needs the npm-side
+        # trusted-publisher config for all six names.
         run: |
           V="${{ needs.build.outputs.version }}"
-          if npm publish --ignore-scripts; then
-            exit 0
-          fi
-          if [ "$(npm view "limulin@$V" version 2>/dev/null)" = "$V" ]; then
-            echo "::warning::limulin@$V is already published; skipping npm"
-            exit 0
-          fi
-          exit 1
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          failed=0
+          for dir in dist/npm/*; do
+            name="$(bun -p "await Bun.file('$dir/package.json').json().then(p=>p.name)")"
+            if npm publish "$dir" --provenance --access public --ignore-scripts; then
+              echo "published $name@$V"
+            elif [ "$(npm view "$name@$V" version 2>/dev/null)" = "$V" ]; then
+              echo "::warning::$name@$V is already published; skipping"
+            else
+              echo "::error::$name@$V failed to publish"
+              failed=1
+            fi
+          done
+          exit "$failed"
 
       - name: Package Homebrew tarballs
         # One deterministic tarball asset per Homebrew target: the tap
         # generates a URL block for exactly these four names (ADR-0003).
+        # The target list derives from the table, never from literals here.
         run: |
           V="${{ needs.build.outputs.version }}"
-          for target in darwin-arm64 darwin-x64 linux-x64 linux-aarch64; do
+          TARGETS="$(bun -e 'const {BREW_TARGETS}=await import("./scripts/homebrew.ts"); console.log(BREW_TARGETS.join(" "))')"
+          for target in $TARGETS; do
             bun run scripts/homebrew.ts package \
               --binary "dist/binaries/lim-$V-$target" \
               --version "$V" \
               --target "$target" \
               --dir dist/binaries
           done
-          for target in darwin-arm64 darwin-x64 linux-x64 linux-aarch64; do
+          for target in $TARGETS; do
             tarball="dist/binaries/lim-$V-$target.tar.gz"
             [ -s "$tarball" ] || { echo "missing or empty: $tarball"; exit 1; }
           done
 
+      - name: Write SHA256SUMS and lim-latest.txt
+        # SHA256SUMS covers every binary and brew tarball asset; the
+        # installer verifies against it (spec #4).
+        run: |
+          V="${{ needs.build.outputs.version }}"
+          bun -e '
+            const { TARGETS, binaryAssetName, formatSha256Sums, versionFileContent } =
+              await import("./scripts/targets.ts");
+            const { assetName } = await import("./scripts/homebrew.ts");
+            const version = process.env.V;
+            const entries = [];
+            for (const t of TARGETS) {
+              const file = binaryAssetName(version, t.name);
+              const sha256 = new Bun.CryptoHasher("sha256")
+                .update(await Bun.file(`dist/binaries/${file}`).arrayBuffer()).digest("hex");
+              entries.push({ file, sha256 });
+            }
+            for (const t of TARGETS) {
+              if (t.os === "win32") continue;
+              const file = assetName(version, t.name);
+              const sha256 = new Bun.CryptoHasher("sha256")
+                .update(await Bun.file(`dist/binaries/${file}`).arrayBuffer()).digest("hex");
+              entries.push({ file, sha256 });
+            }
+            await Bun.write("dist/binaries/SHA256SUMS", formatSha256Sums(entries));
+            await Bun.write("dist/binaries/lim-latest.txt", versionFileContent(version));
+          '
+        env:
+          V: ${{ needs.build.outputs.version }}
+
       - name: Publish GitHub Release assets
+        # Everything under dist/binaries plus the installer: the asset set
+        # is exactly what the table and the brew step produced.
         run: |
           V="${{ needs.build.outputs.version }}"
           gh release view "v$V" >/dev/null 2>&1 || gh release create "v$V" --generate-notes
-          gh release upload "v$V" --clobber \
-            "dist/binaries/lim-$V-darwin-arm64" \
-            "dist/binaries/lim-$V-darwin-x64" \
-            "dist/binaries/lim-$V-linux-x64" \
-            "dist/binaries/lim-$V-linux-aarch64" \
-            "dist/binaries/lim-$V-windows-x64.exe" \
-            "dist/binaries/lim-$V-darwin-arm64.tar.gz" \
-            "dist/binaries/lim-$V-darwin-x64.tar.gz" \
-            "dist/binaries/lim-$V-linux-x64.tar.gz" \
-            "dist/binaries/lim-$V-linux-aarch64.tar.gz"
+          gh release upload "v$V" --clobber dist/binaries/* install.sh
           gh release view "v$V" --json assets --jq '.assets[].name'
 
   tap:
@@ -280,11 +306,13 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.TAP_TRIGGER_TOKEN }}
       TAP_REPO: xminihub/homebrew-tap
-      VERSION: ${{ needs.publish.outputs.version }}
+      VERSION: ${{ needs.build.outputs.version }}
     steps:
       # The tap owns the formula: this dispatches its bump workflow and waits
       # for the run to land, so a release that failed to bump fails here rather
-      # than leaving a stale Formula/lim.rb behind (ADR-0003).
+      # than leaving a stale Formula/lim.rb behind (ADR-0003). The tap's
+      # tools/lim.json must already carry the linux-arm64 key (ADR-0004
+      # cutover: tap PR lands before the first renamed release).
       - name: Dispatch the formula bump
         id: dispatch
         run: |

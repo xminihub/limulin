@@ -76,8 +76,8 @@ describe("homebrew asset naming", () => {
       "lim-0.3.2-darwin-x64.tar.gz",
     );
     expect(assetName("0.3.2", "linux-x64")).toBe("lim-0.3.2-linux-x64.tar.gz");
-    expect(assetName("0.3.2", "linux-aarch64")).toBe(
-      "lim-0.3.2-linux-aarch64.tar.gz",
+    expect(assetName("0.3.2", "linux-arm64")).toBe(
+      "lim-0.3.2-linux-arm64.tar.gz",
     );
   });
 
@@ -89,7 +89,7 @@ describe("homebrew asset naming", () => {
     expect([...BREW_TARGETS].sort()).toEqual([
       "darwin-arm64",
       "darwin-x64",
-      "linux-aarch64",
+      "linux-arm64",
       "linux-x64",
     ]);
   });
@@ -110,7 +110,7 @@ describe("homebrew asset naming", () => {
   });
 
   test("a target outside the brew targets is refused", () => {
-    expect(() => parseTarget("windows-x64")).toThrow("not a homebrew target");
+    expect(() => parseTarget("win32-x64")).toThrow("not a homebrew target");
     expect(() => parseTarget("darwin-arm65")).toThrow("not a homebrew target");
     expect(() => parseTarget("")).toThrow("not a homebrew target");
   });
@@ -192,13 +192,13 @@ describe("homebrew tarball packaging", () => {
     const first = await packageTarball({
       binary,
       version: "0.3.2",
-      target: "linux-aarch64",
+      target: "linux-arm64",
       outDir: dir,
     });
     const second = await packageTarball({
       binary,
       version: "0.3.2",
-      target: "linux-aarch64",
+      target: "linux-arm64",
       outDir: dir,
     });
 
@@ -262,7 +262,7 @@ describe("homebrew packaging cli", () => {
       "--version",
       "0.3.2",
       "--target",
-      "windows-x64",
+      "win32-x64",
       "--dir",
       dir,
     ]);

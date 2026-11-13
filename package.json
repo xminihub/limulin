@@ -19,30 +19,20 @@
     "url": "https://github.com/xminihub/limulin/issues"
   },
   "bin": {
-    "lim": "./dist/lim.js"
-  },
-  "main": "dist/lim.js",
-  "module": "dist/lim.js",
-  "exports": {
-    ".": "./dist/lim.js"
+    "lim": "./bin/lim.cjs"
   },
   "files": [
-    "dist/lim.js",
+    "bin/lim.cjs",
     "README.md"
   ],
   "type": "module",
-  "engines": {
-    "node": ">=22",
-    "bun": ">=1.4.4"
-  },
   "scripts": {
     "dev": "bun src/index.ts",
-    "build": "bun run scripts/build.ts",
     "build:binaries": "bash scripts/build-binaries.sh",
     "test": "bun test",
     "typecheck": "bun check",
     "fmt": "bun fmt",
-    "prepublishOnly": "bun run typecheck && bun run build"
+    "build:npm": "bun run scripts/npm-packages.ts"
   },
   "dependencies": {
     "@opentui/core": "^0.8.4",
