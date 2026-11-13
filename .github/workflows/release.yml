@@ -234,6 +234,16 @@ jobs:
           failed=0
           for dir in dist/npm/*; do
             name="$(bun -p "await Bun.file('$dir/package.json').json().then(p=>p.name)")"
+            # TODO(npm): re-enable once npm whitelists limulin-win32-x64.
+            # Publish attempts return 403 "Package name triggered spam
+            # detection" (see run 43399489363, v0.4.1); the other platform
+            # packages publish fine, so this is an npm-side false positive.
+            # Action: contact https://npmjs.com/support to clear the flag,
+            # then delete this skip block.
+            if [ "$name" = "limulin-win32-x64" ]; then
+              echo "::warning::skipping $name@$V publish (npm spam-detection 403, see TODO in this step)"
+              continue
+            fi
             if npm publish "$dir" --access public --ignore-scripts; then
               echo "published $name@$V"
             elif [ "$(npm view "$name@$V" version 2>/dev/null)" = "$V" ]; then
