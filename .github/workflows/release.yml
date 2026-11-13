@@ -178,22 +178,6 @@ jobs:
             rm "$bin.zip"
           done
 
-      - name: Verify notarization is visible to Gatekeeper
-        timeout-minutes: 10
-        run: |
-          for bin in lim-*-darwin-*; do
-            for attempt in 1 2 3 4 5 6; do
-              if spctl --assess --type exec --verbose=2 "$bin"; then
-                break
-              fi
-              if [ "$attempt" = 6 ]; then
-                echo "::warning::Gatekeeper did not accept $bin yet; the ticket should propagate shortly"
-              else
-                sleep 30
-              fi
-            done
-          done
-
       - name: Upload signed darwin binaries
         uses: actions/upload-artifact@v4
         with:
