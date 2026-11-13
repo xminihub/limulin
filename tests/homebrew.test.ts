@@ -181,9 +181,9 @@ describe("homebrew tarball packaging", () => {
 
     const unpacked = await mkdtemp(join(tmpdir(), "lim-unpack-"));
     mustRun(["tar", "-xzf", result.path, "-C", unpacked]);
-    expect(
-      new Uint8Array(await readFile(join(unpacked, "lim"))),
-    ).toEqual(payload);
+    expect(new Uint8Array(await readFile(join(unpacked, "lim")))).toEqual(
+      payload,
+    );
   });
 
   test("packaging the same bytes twice is byte-identical across targets", async () => {
