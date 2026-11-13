@@ -317,4 +317,4 @@ jobs:
             exit 1
           fi
           gh run view "${{ steps.dispatch.outputs.run_id }}" --repo "$TAP_REPO" \
-            --json conclusion --jq '"tap bump conclusion: " + .'
+            --json conclusion --jq '"tap bump conclusion: \(.conclusion)"'
