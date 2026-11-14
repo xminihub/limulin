@@ -44,6 +44,10 @@ function tarListing(file: string): string {
   const proc = Bun.spawnSync(["tar", "-tvzf", file], {
     stdout: "pipe",
     stderr: "pipe",
+    // GNU tar prints a member mtime in local time, so reading the epoch off the
+    // listing only says "the mtime is zeroed" in one timezone. Pinned, it says
+    // that everywhere; the packaged bytes are TZ-independent either way.
+    env: { ...process.env, TZ: "UTC" },
   });
   if (proc.exitCode !== 0) {
     throw new Error(`tar -tvzf ${file} failed: ${proc.stderr.toString()}`);
