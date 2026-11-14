@@ -173,14 +173,16 @@ we also control.
   `<bin>-<version>-<brew target>.tar.gz`, derived only inside the tap.
   `bump.yml` refuses to render when a declared target has no such asset, so a
   product that renames its artifacts breaks the bump rather than shipping a
-  404 URL to users.
+  404 URL to users. The tap derives its formula blocks from that same declared
+  list, os and cpu alike, so a target name has exactly one home there too; a
+  name the tap cannot render fails the bump instead of going unnoticed.
 - Credentials are split by direction. The tap commits with its own
   `GITHUB_TOKEN`; no product token ever writes tap contents. A product only
   dispatches a run and reads it, which limulin does with a fine-grained
   `TAP_TRIGGER_TOKEN` (Actions read/write on the tap) stored as an org secret.
 - Platform reach is every target except win32 — `darwin-arm64`, `darwin-x64`,
   `linux-arm64`, `linux-x64` — filtered from the target table by
-  `BREW_TARGETS`, not written out as a list. `windows-x64` stays outside
+  `BREW_TARGETS`, not written out as a list. `win32-x64` stays outside
   Homebrew.
 - `backfill.yml` dispatches the same bump daily for any `tools/*.json` whose
   upstream latest no longer matches its formula, and files a `stale-formula`
@@ -204,22 +206,29 @@ we also control.
 - **One artifact kind, so one build breaks every channel.** There is no JS
   fallback anywhere, and the channels are published in sequence inside one run,
   so a failure partway through leaves them disagreeing rather than leaving
-  nothing installed. That is the state today: GitHub Release and npm are at
-  v0.4.2, `Formula/lim.rb` is still pinned at v0.3.4, and `limulin-win32-x64`
-  has never existed on npm at all. The guard is the existing "every target
-  binary was produced" check plus the brew-tarball non-empty check, not a test
-  matrix.
-- The tap-side rename has **not landed**: the tap's `tools/lim.json` still
-  declares `linux-aarch64`, so it cannot render a URL block for the
+  nothing installed. v0.4.3 is that case: the GitHub Release and all five npm
+  packages moved to it while the tap job's failure left `Formula/lim.rb` at
+  v0.3.4, until the rename below landed and the bump caught up.
+  `limulin-win32-x64` has never existed on npm at all. The guard is the
+  existing "every target binary was produced" check plus the brew-tarball
+  non-empty check, not a test matrix.
+- The tap-side rename has **landed** (homebrew-tap#3): `tools/lim.json` now
+  declares `linux-arm64`, so `bump.yml` renders the URL for the
   `lim-<version>-linux-arm64.tar.gz` that v0.4.2 and every later release
-  publishes. Two failures sit in front of it, and only the second is the design
-  working. The first was mechanical: the tap job depended only on `publish`, so
-  the dispatch sent an empty `version` and the tap rejected it with HTTP 422 —
-  fixed by having the job need `build` as well. The second is the contract
-  doing its job: once the dispatch works, `bump.yml` refuses to render a target
-  with no matching asset. The cutover is ordered deliberately — the tap PR that
-  renames that key lands first, renamed releases after it — so a red bump is
-  what keeps a 404 URL out of the formula, not a regression to work around.
+  publishes. It landed _after_ the renamed releases, not before them as the
+  cutover order intended, and what kept that gap harmless was the contract
+  itself: `bump.yml` refuses to render a target with no matching asset, so the
+  tap stayed red at v0.3.4 rather than pinning a URL that 404s. The mechanical
+  failure in front of that one — the tap job depended only on `publish`, so the
+  dispatch sent an empty `version` and the tap answered HTTP 422 — is fixed by
+  having the job need `build` as well. The margin was narrower than the red job
+  suggests: the tap spelled the target list twice, once in `tools/lim.json` and
+  again in its renderer, and the second copy fails by _dropping_ a target it
+  does not recognise rather than by erroring. Had the rename landed in
+  `tools/lim.json` alone, the renderer's stale lookup would have found no arm
+  branch, rendered an `on_linux` block holding only the `linux-x64` url, and
+  handed `linux-arm64` installs that artifact on a green bump. The duplicate is
+  gone; an unrenderable target now fails the bump by name.
 - A tool's release pipeline and its formula can no longer be changed in one
   commit. The contract between them is an asset name, and it is checked in the
   tap rather than by a unit test in the source repository;
