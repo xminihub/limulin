@@ -115,6 +115,10 @@ jobs:
     env:
       KEYCHAIN: ci.keychain
     steps:
+      # The codesign step needs scripts/entitlements.mac.plist from the repo;
+      # the artifacts alone are not enough to sign correctly.
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           name: darwin-binaries-unsigned
@@ -140,8 +144,10 @@ jobs:
           security unlock-keychain -p ci "$KEYCHAIN"
           for bin in lim-*-darwin-*; do
             codesign --force --timestamp --keychain "$KEYCHAIN" \
-              --sign "Developer ID Application" --options runtime "$bin"
+              --sign "Developer ID Application" --options runtime \
+              --entitlements scripts/entitlements.mac.plist "$bin"
             codesign --verify --verbose=2 "$bin"
+            codesign -d --entitlements - "$bin"
           done
 
       - name: Notarize darwin binaries
