@@ -115,9 +115,12 @@ jobs:
     env:
       KEYCHAIN: ci.keychain
     steps:
-      # The codesign step needs scripts/entitlements.mac.plist from the repo;
-      # the artifacts alone are not enough to sign correctly.
-      - uses: actions/checkout@v4
+      - name: Checkout for the entitlements plist
+        timeout-minutes: 5
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          ref: v${{ needs.build.outputs.version }}
 
       - uses: actions/download-artifact@v4
         with:

@@ -138,20 +138,21 @@ we also control.
   re-`unlock-keychain` immediately before signing, and pass `--keychain` to
   `codesign`.
 - Sign each darwin binary as Developer ID with hardened runtime (`--options runtime`)
-  _and_ `scripts/entitlements.mac.plist`, then notarize with
+  and `scripts/entitlements.mac.plist`, then notarize with
   `notarytool submit --wait` over a `ditto -c -k --keepParent` zip. The plist is
-  load-bearing, not hygiene: `bun build --compile` embeds `@opentui/core`'s
-  `libopentui.dylib` and extracts it to `$TMPDIR` to `dlopen()` at startup, and
+  load-bearing, not hygiene. `bun build --compile` embeds `@opentui/core`'s
+  `libopentui.dylib` and extracts it to `$TMPDIR` to `dlopen()` at startup;
   hardened runtime's Library Validation rejects a mapped file whose signature is
-  not the process's Team ID — that dylib ships ad-hoc, linker-signed, with no
-  Team ID at all. `com.apple.security.cs.disable-library-validation` lets the
-  load happen; `com.apple.security.cs.allow-jit` lets `bun:ffi` map the
-  executable memory the render library needs next. A binary signed without
-  either passes `codesign --verify`, gets `Accepted` from the notary and
-  installs cleanly, then dies before it draws a frame.
-- The `sign-macos` job checks the repository out as well as downloading the
-  artifacts, because the entitlements file lives in `scripts/`. It used to be an
-  artifacts-only job.
+  not the process's Team ID, and that dylib ships ad-hoc, linker-signed, with no
+  Team ID at all. `com.apple.security.cs.disable-library-validation` is what lets
+  it load. The next line then needs executable memory for `bun:ffi`, which the
+  same runtime refuses: `com.apple.security.cs.allow-jit` is what lets it map.
+  Neither refusal is visible while signing: the binary passes `codesign
+--verify` and earns `Accepted` from the notary whether the plist is there or
+  not, and each missing exception is a crash before the first frame.
+- `sign-macos` is no longer artifacts-only: it checks out the release tag, the
+  same ref `publish` checks out, because the plist is part of a correct
+  signature.
 - **Do not staple.** There is nothing to staple to unless lim ships a `.pkg` or
   `.dmg`, which this document decides not to do.
 - `notarytool submit --wait` returning `Accepted` is the proof that
@@ -159,8 +160,10 @@ we also control.
   warning, not a failure, because Apple indexes tickets asynchronously — was
   added and later removed from the job; nothing in the signing path assesses the
   binary a second time.
-- Every step in the signing path carries `timeout-minutes` (5 import, 10
+- The signing path's steps carry `timeout-minutes` (5 checkout, 5 import, 10
   codesign, 30 notarize). A hung step must cost minutes, not a runner lifetime.
+  The artifact upload and download steps are left without one: they wait on
+  GitHub's own storage, never on a prompt.
 - The codesign step prints `codesign -d --entitlements -` per binary. It is log
   output, not a gate: with nothing in the pipeline running the artifact, the
   baked-in entitlements are the cheapest place for a lost `--entitlements` flag
@@ -266,13 +269,14 @@ we also control.
   the download step, not executed.
 - The shipped Mach-O has no offline ticket: a quarantined direct download needs
   network for its first Gatekeeper assessment.
-- The signing path proves a signature, not a running program. Nothing in it
-  executes the artifact, which is how 0.4.3 and 0.4.4 were green on CI and
-  broken for every macOS user at the same time. What settled it ran on the
-  maintainer's machine: the same `bun build --compile` output, the same
-  Developer ID identity, signed with and without the plist and launched under a
-  pty. A smoke run of the signed binary on the runner would close that gap and
-  is a known, accepted gap rather than a rejected one.
+- The signing path proves a signature, not a running program: nothing in it
+  executes the artifact, which is how 0.4.3 and 0.4.4 came to be green on CI and
+  unusable for every macOS user at the same time. What settled it ran on the
+  maintainer's machine — the same `bun build --compile` output, the same
+  Developer ID identity, signed with and without the plist, launched under a
+  pty. Running the signed binary on the runner would close that gap, and
+  §Explicitly out of scope still declines release-time smoke tests; this
+  amendment leaves that decision in place rather than reversing it.
 - A broken release is retired by the next release. 0.4.3 and 0.4.4 stay as
   published, with no tap-side deprecation and no edit to the GitHub Release: the
   formula moves when the next bump lands, and nothing in the channels supports
@@ -312,9 +316,12 @@ we also control.
   current shape.
 - **Re-signing `libopentui.dylib` under our own Team ID.** That satisfies
   Library Validation without an exception, but the dylib is embedded by
-  `bun build --compile`, which runs on a Linux runner with no certificate;
-  making the signatures match would move the compile onto the macOS job and undo
-  the cross-compilation decision in §Targets and artifacts.
+  `bun build --compile`, which runs on the ubuntu runner for every target at
+  once (`scripts/build-binaries.sh`); making the signatures match would move the
+  compile onto the macOS job and give up that single-host build.
+- **No entitlements plist at all**, which is what this document claimed until
+  2026-11-18. Not a decision that was made and reversed: the hardened runtime
+  was added on its own, and nothing ran the signed artifact to find out.
 - **Dropping `--options runtime`.** It removes both refusals by giving up the
   hardened runtime — the thing this document's signing contract exists to keep.
 - **`allow-unsigned-executable-memory` in place of `allow-jit`.** Also renders

@@ -67,7 +67,16 @@ names code, issues, tests and ADRs must use.
 
 - **Developer ID Application** — the signing identity. Not `Apple Development`:
   distribution binaries only.
-- **hardened runtime** — `--options runtime`.
+- **hardened runtime** — `--options runtime`. Never granted alone: it needs the
+  entitlements plist below, and a binary signed without it passes every check in
+  the signing path before crashing on the first frame.
+- **Library Validation** — the hardened-runtime rule that a `dlopen()`ed file
+  must carry the loading process's Team ID. `libopentui.dylib` is ad-hoc signed
+  and has none.
+- **entitlements plist** — `scripts/entitlements.mac.plist`, the two exceptions
+  a signed lim needs: library validation off for that dylib load, and JIT
+  allowed for the executable memory `bun:ffi` needs afterwards. See ADR-0001
+  §Signing and notarization.
 - **notarization ticket** — what `notarytool submit --wait` produces for a
   cdhash. It lives on Apple's servers.
 - **stapling** — attaching that ticket to the artifact itself. Not available for
